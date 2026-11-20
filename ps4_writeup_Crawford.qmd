@@ -1,0 +1,166 @@
+---
+title: "Problem Set 4"
+author: Bryce Crawford
+date: today
+format:
+html:
+  toc:
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+**GitHub repo:** https://github.com/brycecrawford/ec522_ps4_Crawford.git
+
+### Part 2 - A Business Forecasting Horse Race: ARIMA vs. ETS
+
+#### 2.1a. The Data
+
+```{r}
+pacman::p_load(tidyverse, fpp3, BVAR, feasts)
+
+#Importing data set from file folder
+liquor_raw <- read_csv("Data/MRTSSM4453USN.csv",
+                       na = ".",
+                       col_types = cols(
+                         observation_date = col_date(format = "%Y-%m-%d"),
+                         MRTSSM4453USN = col_double()))
+
+# Creating time series object indexed monthly and renaming columns
+liquor <- liquor_raw |> 
+  transmute(
+    Month = yearmonth(observation_date),
+    sales = MRTSSM4453USN
+  ) |> 
+  as_tsibble( index = Month) |> 
+  filter(Month <= yearmonth("2019 Dec") )
+
+# checking for gaps in time series 
+has_gaps(liquor)
+```
+
+### 2.1b. Plotting Sales
+
+```{r}
+#graphing sales with autoplot
+autoplot(liquor, sales) +
+  labs(
+    title = "Monthly Retail Sales of liquor in the United States (Millions of Dollars)",
+    x = "Month",
+    y = "Sales (Millions of Dollars)")
+
+#Graphing seasonal monthly sales by year with gg_season
+gg_season(liquor, log(sales)) +
+  labs(
+    title = "Monthly Retail Sales of liquor in the United States (Log-Scale)",
+    x = "Month",
+    y = "Sales (Log-Scale)"
+  )
+```
+
+The overall trend of liquor sales in the united states shows a seasonal monthly trend that is growing overtime. Seasonal swings look to grow with the level of the series. The difference between the peaks and troughs are greater in 2020 than in 2000, showing greater seasonality than previous subsequent years. November moving into December shows the fastest growth of liquor sales and is accompanied with the highest overall sales in a calendar year. The lowest liquor sales start in January and reach its peak in December. Using log scale shows a greater rate throughout the year. 
+
+#### 2.2
+
+#### 2.2a.
+
+```{r}
+#Fitting an ARIMA model and ETS model to the log of sales
+liquor_fit <- liquor |> 
+  model(arima = ARIMA(log(sales)),
+        ets = ETS(log(sales)))
+
+#Assessing specification of each model
+liquor_fit |> select(arima) |>  report()
+liquor_fit |> select(ets) |> report()
+```
+
+The ARIMA model specification was (1,0,2)(2,1,1)[12] with drift. This means a non-seasonal single lag, no month-to-month differencing, and 2 lagged forecast errors. Then a seasonal lag of 12 and 24 months prior, a seasonal differencing which is this month minus the same month as last year, and 1 lagged forecast error. This was differenced by taking the value of a month and subtracting the value of the same month from the year prior. 
+ETS specification was (A,A,A) which means the error, trend, and seasonality are all additive. This is due to taking the log of sales. The additive components correspond to multiplicative effects in dollars. 
+
+#### 2.2b. ljung-box test
+
+```{r}
+# Checking residuals of ARIMA model
+liquor_fit |> select(arima) |> gg_tsresiduals()
+
+#Ljung-Box test of residuals of ARIMA model
+liquor_fit |> 
+  select(arima) |> 
+  augment() |> 
+  features(.innov, ljung_box, lag = 24, dof = 6)
+```
+
+The ljung-box test returned a p-value of 0, which is less than 0.05 or 5% critical value. This means we reject the null hypothesis meaning there is statistically significant evidence that there is autocorrelation in the residuals and its not solely white noise. 
+
+####2.3a. Horse Race
+
+```{r}
+#Horse Race
+liquor_cv <- liquor |> 
+  stretch_tsibble(.init = 120, .step = 1) |> 
+  filter(.id < max(.id))
+
+liquor_cv_fit <- liquor_cv |> 
+  model(snaive = SNAIVE(sales),
+        ets = ETS(log(sales)),
+        arima = ARIMA(log(sales)))
+saveRDS(liquor_cv_fit, "results/liquor_cv_fit.rds")
+```
+
+There will be 216 forecast origins with the TS-CV. 336 - 120 = 216
+
+#### 2.3b.
+
+```{r}
+# Producing one-month ahead forecasts
+liquor_cv_fc <- liquor_cv_fit |> 
+  forecast(h = 1)
+
+#Calculating accuracy of forecasts
+liquor_cv_fc |> 
+  accuracy(liquor, measure = list(RMSE = RMSE, MAE = MAE)) |> 
+  knitr::kable(digits = 2)
+
+#Producing first and last forecast
+range(liquor_cv_fc$Month)
+```
+
+The dates of the first and last foreacast are January 2002 and December 2019. Using the MSE and MAE, the ARIMA model performs better then the ETS and SNAIVE. Without the Diebold-Mariano test, we cannot be 100% positive on how much better the models are to each other.
+
+#### 2.4
+
+```{r}
+#creating tibble of forecast errors for each model
+liquor_errs <- liquor_cv_fc |> 
+  as_tibble() |> 
+  left_join(as.tibble(liquor) |> select(Month, actual = sales),
+            by = "Month") |> 
+  mutate(e = actual - .mean) |> 
+  select(Month, .model, e) |> 
+  pivot_wider(names_from = .model, values_from = e) 
+
+#Diebold-Mariano test comparing ARIMA to ETS
+dm_arima_ets <- forecast::dm.test(liquor_errs$arima, liquor_errs$ets, h =1, power = 2)
+
+#Diebold-Mariano test comparing ARIMA to SNAIVE
+dm_arima_snaive <- forecast::dm.test(liquor_errs$arima, liquor_errs$snaive, h = 1, power = 2)
+
+
+dm_table <- data.frame(
+  Comparison   = c("ARIMA vs. ETS", "ARIMA vs. SNAIVE"),
+  DM_statistic = c(dm_arima_ets$statistic, dm_arima_snaive$statistic),
+  p_value      = c(dm_arima_ets$p.value,   dm_arima_snaive$p.value)
+)
+
+knitr::kable(dm_table, digits = 3,
+             col.names = c("Comparison", "DM Statistic", "p-value"),
+             caption = "Diebold-Mariano Tests (squared-error loss, h = 1)")
+
+```
+
+Using the Diebold_Mariano test, a p-value resulted in .004 and 0 explain that the there is statistically significant evidence to reject the null hypothesis. The accuracy between the test differ. Since the DM statistic is negative, this demonstrates that the ARIMA model is more accurate than both the ETS and SNAIVE model. The DM confirms what the previous table illustrated. If I was a business owner, I would use the ARIMA model over the ETS and Random Walk Model. 
+
+
+
