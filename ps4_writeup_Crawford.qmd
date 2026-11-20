@@ -101,12 +101,12 @@ liquor_cv <- liquor |>
   stretch_tsibble(.init = 120, .step = 1) |> 
   filter(.id < max(.id))
 
-liquor_cv_fit <- liquor_cv |> 
-  model(snaive = SNAIVE(sales),
-        ets = ETS(log(sales)),
-        arima = ARIMA(log(sales)))
+liquor_cv_fit <- readRDS("results/liquor_cv_fit.rds")
+# liquor_cv_fit <- liquor_cv |> 
+#   model(snaive = SNAIVE(sales),
+#         ets = ETS(log(sales)),
+#         arima = ARIMA(log(sales)))
 # saveRDS(liquor_cv_fit, "results/liquor_cv_fit.rds")
-readRDS(liquor_cv_fit, "results/liquor_cv_fit.rds")
 ```
 
 There will be 216 forecast origins with the TS-CV. 336 - 120 = 216
@@ -293,9 +293,9 @@ for (T in origins) {
 }
 
 set.seed(422)
-fc_bvar_03 <- bvar_cv(0.3)
+fc_bvar_03 <- readRDS("results/fc_bvar_03.rds")
+# fc_bvar_03 <- bvar_cv(0.3)
 # saveRDS(fc_bvar_03, "results/fc_bvar_03.rds")
-readRDS(fc_bvar_03, "results/fc_bvar_03.rds")
 ```
 
 #### 4.3b
@@ -303,9 +303,11 @@ readRDS(fc_bvar_03, "results/fc_bvar_03.rds")
 ```{r}
 # Estimating BVAR(4) with tighter lambda
 set.seed(422)
-fc_bvar_05 <- bvar_cv(0.05)
+fc_bvar_05 <- readRDS("results/fc_bvar_05.rds")
+# fc_bvar_05 <- bvar_cv(0.05)
 # saveRDS(fc_bvar_05, "results/fc_bvar_05.rds")
-readRDS(fc_bvar_05, "results/fc_bvar_05.rds")
+
+
 
 var_results <- tibble(
   Variable = colnames(y),
@@ -315,7 +317,7 @@ var_results <- tibble(
   `BVAR(4) lambda = 0.05` = rmse_by_var(fc_bvar_05))
 
 # saveRDS(var_results, "results/var_results.rds")
-readRDS(var_results, "results/var_results.rds")
+readRDS("results/var_results.rds")
 
 var_results |> knitr::kable(digits = 3)
 ```
@@ -398,6 +400,7 @@ The first 3 factors explain around 30% of the variation of the series.
 #### 5.2b
 
 ```{r}
+F1 <- pc$x[, 1] * sign(cor(pc$x[, 1], fm$INDPRO))
 tibble(date = fm$date, F1 = F1) |> 
   ggplot(aes(date, F1)) + 
   geom_line() +
