@@ -162,5 +162,33 @@ knitr::kable(dm_table, digits = 3,
 
 Using the Diebold_Mariano test, a p-value resulted in .004 and 0 explain that the there is statistically significant evidence to reject the null hypothesis. The accuracy between the test differ. Since the DM statistic is negative, this demonstrates that the ARIMA model is more accurate than both the ETS and SNAIVE model. The DM confirms what the previous table illustrated. If I was a business owner, I would use the ARIMA model over the ETS and Random Walk Model. 
 
+### 3
+
+#### 3a
+
+```{r}
+# Model Combination of ARIMA and ETS
+liquor_combo_fc <- liquor_cv_fit |> 
+  mutate(combo = (arima + ets) / 2 ) |> 
+  forecast(h = 1)
+
+#Testing accuracy of model combinations to their individual models
+liquor_combo_fc |> 
+  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE)) |> 
+  knitr::kable(digits = 2)
+```
+
+The combo model that balances between the ARIMA and ETS perform better than the ETS and SNAIVE models, however, the ARIMA model by itself performs better than the combination model. 
+
+#### 3b
+
+```{r}
+#Computing correlation of errors between ARIMA and ETS
+cor(liquor_errs$arima, liquor_errs$ets)
+```
+
+A correlation of .88 means the errors between the ARIMA models and ETS model are highly correlation. This high correlation is confirmation from the combination accuracy table because a combination of models with similar errors typically doesn't outperform the individual models. In this case the combo performed better that ETS, but not ARIMA. The ARIMA model performs better than the ETS, so when combining it with the worse model it decreases the accuracy. 
+
+
 
 
