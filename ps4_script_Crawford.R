@@ -103,4 +103,108 @@ liquor_combo_fc |>
 
 #Computing correlation of errors between ARIMA and ETS
 cor(liquor_errs$arima, liquor_errs$ets)
-           
+
+#Importing quarterly data set and slicing off the first two rows
+qd_raw <- read_csv("data/fredqd_2026-09.csv", show_col_types = FALSE) |> 
+  slice(-(1:2))
+        
+#Building the growth series
+growth <- function(x) 100 * difference(log(x))
+
+qd <- qd_raw |> 
+  mutate( date = as.Date(sasdate, "%m/%d/%Y")) |> 
+  transmute( date, 
+             gdp    = growth(GDPC1),
+             cons   = growth(PCECC96),
+             iv     = growth(GPDIC1),
+             emp    = growth(PAYEMS),
+             infl   = growth(GDPCTPI),
+             unrate = difference(UNRATE),
+             ffr    = difference(FEDFUNDS),
+             gs10   = difference(GS10)) |> 
+  filter(date >= as.Date("1960-03-01"), date <= as.Date("2019-12-01"))
+
+#Creating matrix for BVAR
+y <- qd |> 
+  select(-date) |> 
+  as.matrix()
+
+nrow(y)
+head(y)
+
+#Setting up TS-CV
+N <- nrow(y)
+origins <- 120:(N - 1)
+actual <- y[121:N, ]
+
+# First and last forecast dates
+range(qd$date[121:N])
+
+# Number of forecasts per variable
+length(origins) * ncol(y)
+
+#Estimating VAR
+var_ols_fc <- function(z,p) {
+  e <-  embed(z,p +1)
+  M <- ncol(z)
+  B <- coef(lm(e[, 1:M] ~ e[, -(1:M)]))
+  x <- c(1, t(z[nrow(z):(nrow(z) - p + 1), ]))
+  x %*% B
+}
+
+fc_var1 <-  NULL
+fc_var4 <- NULL
+for (T in origins) {
+  fc_var1 <- rbind(fc_var1, var_ols_fc(y[1:T, ],1))
+  fc_var4 <- rbind(fc_var4, var_ols_fc(y[1:T, ],4))
+}
+
+#Computing RMSE of each model for each variable
+rmse_by_var <- function(f) sqrt(colMeans((actual - f)^2))
+
+rmse_by_var(fc_var1)
+rmse_by_var(fc_var4)
+
+# Estimating BVAR(4) with a Minnesota Prior
+bvar_cv <- function(lambda) {
+  pr <- bv_priors(hyper = "lambda",
+                  mn = bv_mn(lambda = bv_lambda(mode = lambda, sd = 0.4,
+                                                min = 0.999 * lambda,
+                                                max = 1.001 * lambda),
+                             b = 0))
+  fc <- NULL
+for (T in origins) {
+  fit_T <- bvar(y[1:T, ], lags = 4, priors = pr,
+                n_draw = 2000, n_burn = 1000, verbose = FALSE)
+  x <- c(1, t(y[T:(T - 3), ]))
+  fc <- rbind(fc, x %*% coef(fit_T))
+}
+  fc
+}
+
+set.seed(422)
+fc_bvar_03 <- bvar_cv(0.3)
+saveRDS(fc_bvar_03, "results/fc_bvar_03.rds")
+
+# Estimating BVAR(4) with tighter lambda
+set.seed(422)
+fc_bvar_05 <- bvar_cv(0.05)
+saveRDS(fc_bvar_05, "results/fc_bvar_05.rds")
+
+#VAR and BVAR Results
+var_results <- tibble(
+  Variable = colnames(y),
+  `VAR(1)` = rmse_by_var(fc_var1),
+  `VAR(4)` = rmse_by_var(fc_var4),
+  `BVAR(4) lambda = 0.3` = rmse_by_var(fc_bvar_03),
+  `BVAR(4) lambda = 0.05` = rmse_by_var(fc_bvar_05))
+
+saveRDS(var_results, "results/var_results.rds")
+
+var_results |> knitr::kable(digits = 3)
+
+e_var4 <- actual[, "gdp"] - fc_var4[, 1]
+e_bvar <- actual[, "gdp"] - fc_bvar_03[, 1]
+
+forecast::dm.test(e_var4, e_bvar, h = 1, power = 2)
+

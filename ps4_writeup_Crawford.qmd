@@ -59,7 +59,7 @@ gg_season(liquor, log(sales)) +
   )
 ```
 
-The overall trend of liquor sales in the united states shows a seasonal monthly trend that is growing overtime. Seasonal swings look to grow with the level of the series. The difference between the peaks and troughs are greater in 2020 than in 2000, showing greater seasonality than previous subsequent years. November moving into December shows the fastest growth of liquor sales and is accompanied with the highest overall sales in a calendar year. The lowest liquor sales start in January and reach its peak in December. Using log scale shows a greater rate throughout the year. 
+The overall trend of liquor sales in the united states shows a seasonal monthly trend that is growing overtime. Seasonal swings look to grow with the level of the series. The difference between the peaks and troughs are greater in 2020 than in 2000, showing greater seasonality than previous subsequent years. November moving into December shows the fastest growth of liquor sales and is accompanied with the highest overall sales in a calendar year. The lowest liquor sales start in January and reach its peak in December. Using log scale shows a greater rate throughout the year.
 
 #### 2.2
 
@@ -76,8 +76,7 @@ liquor_fit |> select(arima) |>  report()
 liquor_fit |> select(ets) |> report()
 ```
 
-The ARIMA model specification was (1,0,2)(2,1,1)[12] with drift. This means a non-seasonal single lag, no month-to-month differencing, and 2 lagged forecast errors. Then a seasonal lag of 12 and 24 months prior, a seasonal differencing which is this month minus the same month as last year, and 1 lagged forecast error. This was differenced by taking the value of a month and subtracting the value of the same month from the year prior. 
-ETS specification was (A,A,A) which means the error, trend, and seasonality are all additive. This is due to taking the log of sales. The additive components correspond to multiplicative effects in dollars. 
+The ARIMA model specification was (1,0,2)(2,1,1)\[12\] with drift. This means a non-seasonal single lag, no month-to-month differencing, and 2 lagged forecast errors. Then a seasonal lag of 12 and 24 months prior, a seasonal differencing which is this month minus the same month as last year, and 1 lagged forecast error. This was differenced by taking the value of a month and subtracting the value of the same month from the year prior. ETS specification was (A,A,A) which means the error, trend, and seasonality are all additive. This is due to taking the log of sales. The additive components correspond to multiplicative effects in dollars.
 
 #### 2.2b. ljung-box test
 
@@ -92,7 +91,7 @@ liquor_fit |>
   features(.innov, ljung_box, lag = 24, dof = 6)
 ```
 
-The ljung-box test returned a p-value of 0, which is less than 0.05 or 5% critical value. This means we reject the null hypothesis meaning there is statistically significant evidence that there is autocorrelation in the residuals and its not solely white noise. 
+The ljung-box test returned a p-value of 0, which is less than 0.05 or 5% critical value. This means we reject the null hypothesis meaning there is statistically significant evidence that there is autocorrelation in the residuals and its not solely white noise.
 
 ####2.3a. Horse Race
 
@@ -106,7 +105,8 @@ liquor_cv_fit <- liquor_cv |>
   model(snaive = SNAIVE(sales),
         ets = ETS(log(sales)),
         arima = ARIMA(log(sales)))
-saveRDS(liquor_cv_fit, "results/liquor_cv_fit.rds")
+# saveRDS(liquor_cv_fit, "results/liquor_cv_fit.rds")
+readRDS(liquor_cv_fit, "results/liquor_cv_fit.rds")
 ```
 
 There will be 216 forecast origins with the TS-CV. 336 - 120 = 216
@@ -127,7 +127,7 @@ liquor_cv_fc |>
 range(liquor_cv_fc$Month)
 ```
 
-The dates of the first and last foreacast are January 2002 and December 2019. Using the MSE and MAE, the ARIMA model performs better then the ETS and SNAIVE. Without the Diebold-Mariano test, we cannot be 100% positive on how much better the models are to each other.
+The dates of the first and last forecast are January 2002 and December 2019. Using the MSE and MAE, the ARIMA model performs better then the ETS and SNAIVE. Without the Diebold-Mariano test, we cannot be 100% positive on how much better the models are to each other.
 
 #### 2.4
 
@@ -160,9 +160,9 @@ knitr::kable(dm_table, digits = 3,
 
 ```
 
-Using the Diebold_Mariano test, a p-value resulted in .004 and 0 explain that the there is statistically significant evidence to reject the null hypothesis. The accuracy between the test differ. Since the DM statistic is negative, this demonstrates that the ARIMA model is more accurate than both the ETS and SNAIVE model. The DM confirms what the previous table illustrated. If I was a business owner, I would use the ARIMA model over the ETS and Random Walk Model. 
+Using the Diebold_Mariano test, a p-value resulted in .004 and 0 explain that the there is statistically significant evidence to reject the null hypothesis. The accuracy between the test differ. Since the DM statistic is negative, this demonstrates that the ARIMA model is more accurate than both the ETS and SNAIVE model. The DM confirms what the previous table illustrated. If I was a business owner, I would use the ARIMA model over the ETS and Random Walk Model.
 
-### 3
+### Part 3 Forecast Combination
 
 #### 3a
 
@@ -178,7 +178,7 @@ liquor_combo_fc |>
   knitr::kable(digits = 2)
 ```
 
-The combo model that balances between the ARIMA and ETS perform better than the ETS and SNAIVE models, however, the ARIMA model by itself performs better than the combination model. 
+The combo model that balances between the ARIMA and ETS perform better than the ETS and SNAIVE models, however, the ARIMA model by itself performs better than the combination model.
 
 #### 3b
 
@@ -187,8 +187,152 @@ The combo model that balances between the ARIMA and ETS perform better than the 
 cor(liquor_errs$arima, liquor_errs$ets)
 ```
 
-A correlation of .88 means the errors between the ARIMA models and ETS model are highly correlation. This high correlation is confirmation from the combination accuracy table because a combination of models with similar errors typically doesn't outperform the individual models. In this case the combo performed better that ETS, but not ARIMA. The ARIMA model performs better than the ETS, so when combining it with the worse model it decreases the accuracy. 
+A correlation of .88 means the errors between the ARIMA models and ETS model are highly correlation. This high correlation is confirmation from the combination accuracy table because a combination of models with similar errors typically doesn't outperform the individual models. In this case the combo performed better that ETS, but not ARIMA. The ARIMA model performs better than the ETS, so when combining it with the worse model it decreases the accuracy.
+
+### Part 4 - A Medium Scale VAR vs. a BVAR
+
+#### 4.1a
+
+```{r}
+#Importing quarterly data set and slicing off the first two rows
+qd_raw <- read_csv("data/fredqd_2026-09.csv", show_col_types = FALSE) |> 
+  slice(-(1:2))
+```
+
+#### 4.1b
+
+```{r}
+#Building the growth series
+growth <- function(x) 100 * difference(log(x))
+
+qd <- qd_raw |> 
+  mutate( date = as.Date(sasdate, "%m/%d/%Y")) |> 
+  transmute( date, 
+             gdp    = growth(GDPC1),
+             cons   = growth(PCECC96),
+             iv     = growth(GPDIC1),
+             emp    = growth(PAYEMS),
+             infl   = growth(GDPCTPI),
+             unrate = difference(UNRATE),
+             ffr    = difference(FEDFUNDS),
+             gs10   = difference(GS10)) |> 
+  filter(date >= as.Date("1960-03-01"), date <= as.Date("2019-12-01"))
+
+#Creating matrix for BVAR
+y <- qd |> 
+  select(-date) |> 
+  as.matrix()
+
+nrow(y)
+head(y)
+```
+
+#### 4.1c.
+
+```{r}
+#Setting up TS-CV
+N <- nrow(y)
+origins <- 120:(N - 1)
+actual <- y[121:N, ]
+
+# First and last forecast dates
+range(qd$date[121:N])
+
+# Number of forecasts per variable
+length(origins) * ncol(y)    
+```
+
+This will create 120 forecasts per variable with a total of 960 forecasts. The date range is from 1990-03-01 to 2019-12-01
+
+#### 4.2
+
+```{r}
+#Estimating VAR
+var_ols_fc <- function(z,p) {
+  e <-  embed(z,p +1)
+  M <- ncol(z)
+  B <- coef(lm(e[, 1:M] ~ e[, -(1:M)]))
+  x <- c(1, t(z[nrow(z):(nrow(z) - p + 1), ]))
+  x %*% B
+}
+
+fc_var1 <-  NULL
+fc_var4 <- NULL
+for (T in origins) {
+  fc_var1 <- rbind(fc_var1, var_ols_fc(y[1:T, ],1))
+  fc_var4 <- rbind(fc_var4, var_ols_fc(y[1:T, ],4))
+}
+
+#Computing RMSE of each model for each variable
+rmse_by_var <- function(f) sqrt(colMeans((actual - f)^2))
+
+rmse_by_var(fc_var1)
+rmse_by_var(fc_var4)
+```
+
+The Var(1) model forecasts better than the var(4) model for 7 of the 8 variables. The only variable where var(4) beats var(1) is in inflation and is only better marginally. Our data includes 240 observations from 1990 to 2019. The Var(4) includes more regressors than the var(1) in a small data frame. The var(4) is over fitting the data while the simplier model has more degrees of freedom to try and model. 
+
+#### 4.3a
+
+```{r}
+# Estimating BVAR(4) with a Minnesota Prior
+bvar_cv <- function(lambda) {
+  pr <- bv_priors(hyper = "lambda",
+                  mn = bv_mn(lambda = bv_lambda(mode = lambda, sd = 0.4,
+                                                min = 0.999 * lambda,
+                                                max = 1.001 * lambda),
+                             b = 0))
+  fc <- NULL
+for (T in origins) {
+  fit_T <- bvar(y[1:T, ], lags = 4, priors = pr,
+                n_draw = 2000, n_burn = 1000, verbose = FALSE)
+  x <- c(1, t(y[T:(T - 3), ]))
+  fc <- rbind(fc, x %*% coef(fit_T))
+}
+  fc
+}
+
+set.seed(422)
+fc_bvar_03 <- bvar_cv(0.3)
+# saveRDS(fc_bvar_03, "results/fc_bvar_03.rds")
+readRDS(fc_bvar_03, "results/fc_bvar_03.rds")
+```
+
+#### 4.3b
+
+```{r}
+# Estimating BVAR(4) with tighter lambda
+set.seed(422)
+fc_bvar_05 <- bvar_cv(0.05)
+# saveRDS(fc_bvar_05, "results/fc_bvar_05.rds")
+readRDS(fc_bvar_05, "results/fc_bvar_05.rds")
+
+var_results <- tibble(
+  Variable = colnames(y),
+  `VAR(1)` = rmse_by_var(fc_var1),
+  `VAR(4)` = rmse_by_var(fc_var4),
+  `BVAR(4) lambda = 0.3` = rmse_by_var(fc_bvar_03),
+  `BVAR(4) lambda = 0.05` = rmse_by_var(fc_bvar_05))
+
+# saveRDS(var_results, "results/var_results.rds")
+readRDS(var_results, "results/var_results.rds")
+
+var_results |> knitr::kable(digits = 3)
+```
+
+The BVAR(4) lambda(0.3) performs better than the VAR(4) even though they contain the same variables and lags. The BVAR's shrinkage reduces the estimation noise by pulling the lags down closer to 0. I can confidently say BVAR(4) lambda(0.3) is better than VAR(4) because they share the same lag structure and data. 
+The BVAR(4) lambda(0.3) outperforms the VAR(1) in 3 of the 8 variables. This is not as easy of a comparison between the BVAR(4) lambda(0.3) and the VAR(4) though. A Diebold-Mariano test will be needed in order to compare accuracy. 
+When lambda is 0.05, the model is shrinking the lags too close to zero its and biasing the estimates in the other direction. Some of the variables are positively correlated with its lag, so with a tighter lambda, the model is trying to forecasts the variables the average. 
+RMSE would not be a fair estimate, because I chose the model with the lowest RMSE using the same evaluation sample, the winner’s RMSE is likely optimistically biased: part of its advantage may reflect luck in this particular sample. A fair estimate would require evaluating the chosen model on a separate holdout period not used for model selection.
 
 
+#### 4.3c
 
+```{r}
+#Diebold_mariano test of forecast accuracy of VAR(4) and BVAR(4) lambda)0.3) for GDP
+e_var4 <- actual[, "gdp"] - fc_var4[, 1]
+e_bvar <- actual[, "gdp"] - fc_bvar_03[, 1]
+
+forecast::dm.test(e_var4, e_bvar, h = 1, power = 2)
+```
 
